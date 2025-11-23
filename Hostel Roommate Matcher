@@ -1,0 +1,220 @@
+# hostel_roommate_matcher.py
+
+"""
+Hostel Roommate Matcher
+- Add students with their lifestyle preferences
+- Calculate compatibility scores
+- Suggest best roommate pairs
+"""
+
+from dataclasses import dataclass
+from typing import List, Tuple, Optional
+
+# ------------ Data Model ------------
+
+@dataclass
+class Student:
+    name: str
+    sleep_time: int        # 0 = Early, 1 = Late
+    cleanliness: int       # 1 to 5
+    noise_tolerance: int   # 1 to 5
+    smoker: int            # 0 = No, 1 = Yes
+    intro_extro: int       # 0 = Introvert, 1 = Extrovert
+
+# ------------ Helper Functions ------------
+
+def input_choice(prompt: str, choices: dict) -> int:
+    """
+    Ask user to choose from choices like:
+    {1: "Early", 2: "Late"}
+    Returns the key (e.g., 0 or 1) that WE use internally.
+    """
+    while True:
+        print(prompt)
+        for key, text in choices.items():
+            print(f"{key}. {text}")
+        try:
+            ch = int(input("Enter choice number: ").strip())
+            if ch in choices:
+                return ch
+            else:
+                print("Invalid choice. Try again.\n")
+        except ValueError:
+            print("Please enter a number.\n")
+
+def input_int_range(prompt: str, min_val: int, max_val: int) -> int:
+    while True:
+        try:
+            val = int(input(prompt).strip())
+            if min_val <= val <= max_val:
+                return val
+            print(f"Enter a value between {min_val} and {max_val}.\n")
+        except ValueError:
+            print("Please enter a valid integer.\n")
+
+# ------------ Compatibility Logic ------------
+
+def compatibility_score(a: Student, b: Student) -> int:
+    """
+    Higher score = more compatible.
+    You can tweak weights as you like.
+    """
+    score = 0
+
+    # Sleep time: same is better
+    if a.sleep_time == b.sleep_time:
+        score += 20
+    else:
+        score += 5   # not same, but still manageable
+
+    # Cleanliness: closer is better
+    diff_clean = abs(a.cleanliness - b.cleanliness)
+    score += max(0, 20 - diff_clean * 4)  # 0 to 20 points
+
+    # Noise tolerance: closer is better
+    diff_noise = abs(a.noise_tolerance - b.noise_tolerance)
+    score += max(0, 20 - diff_noise * 4)
+
+    # Smoking: same is ideal, non-smoker + smoker is bad
+    if a.smoker == b.smoker:
+        score += 20
+    else:
+        score -= 10  # penalty: one smokes, other doesn't
+
+    # Personality: intro+intro or extro+extro okay, intro+extro also okay but different
+    if a.intro_extro == b.intro_extro:
+        score += 15
+    else:
+        score += 8
+
+    return score
+
+def suggest_roommate_pairs(students: List[Student]) -> List[Tuple[Student, Optional[Student], Optional[int]]]:
+    """
+    Greedy pairing:
+    - For each unpaired student, find the best unpaired partner.
+    - Return list of tuples: (student1, student2 or None, score or None)
+    """
+    unpaired_indices = set(range(len(students)))
+    pairs = []
+
+    while unpaired_indices:
+        i = unpaired_indices.pop()
+        student_i = students[i]
+
+        # If only one left, no partner
+        if not unpaired_indices:
+            pairs.append((student_i, None, None))
+            break
+
+        best_j = None
+        best_score = None
+
+        for j in unpaired_indices:
+            student_j = students[j]
+            score = compatibility_score(student_i, student_j)
+            if best_score is None or score > best_score:
+                best_score = score
+                best_j = j
+
+        unpaired_indices.remove(best_j)
+        pairs.append((student_i, students[best_j], best_score))
+
+    return pairs
+
+# ------------ Main Menu Logic ------------
+
+def add_student() -> Student:
+    print("\n=== Add New Student ===")
+    name = input("Enter student name: ").strip()
+
+    sleep_time = input_choice(
+        "\nPreferred sleep time?",
+        {0: "Sleeps Early (before 11 PM)", 1: "Sleeps Late (after 11 PM)"}
+    )
+
+    cleanliness = input_int_range(
+        "\nCleanliness level (1 = very messy, 5 = very clean): ",
+        1, 5
+    )
+
+    noise_tolerance = input_int_range(
+        "Noise tolerance (1 = needs silence, 5 = okay with noise): ",
+        1, 5
+    )
+
+    smoker = input_choice(
+        "\nDo they smoke?",
+        {0: "No", 1: "Yes"}
+    )
+
+    intro_extro = input_choice(
+        "\nPersonality type?",
+        {0: "Introvert", 1: "Extrovert"}
+    )
+
+    print(f"\nStudent '{name}' added successfully!\n")
+    return Student(
+        name=name,
+        sleep_time=sleep_time,
+        cleanliness=cleanliness,
+        noise_tolerance=noise_tolerance,
+        smoker=smoker,
+        intro_extro=intro_extro,
+    )
+
+def print_students(students: List[Student]) -> None:
+    if not students:
+        print("\nNo students added yet.\n")
+        return
+    print("\n=== List of Students ===")
+    for idx, s in enumerate(students, start=1):
+        print(f"{idx}. {s.name}")
+        print(f"   Sleep time   : {'Early' if s.sleep_time == 0 else 'Late'}")
+        print(f"   Cleanliness  : {s.cleanliness}/5")
+        print(f"   Noise tol.   : {s.noise_tolerance}/5")
+        print(f"   Smoker       : {'Yes' if s.smoker == 1 else 'No'}")
+        print(f"   Personality  : {'Introvert' if s.intro_extro == 0 else 'Extrovert'}")
+    print()
+
+def run_matcher(students: List[Student]) -> None:
+    if len(students) < 2:
+        print("\nNeed at least 2 students to suggest roommate pairs.\n")
+        return
+
+    pairs = suggest_roommate_pairs(students)
+    print("\n=== Suggested Roommate Pairs ===")
+    for s1, s2, score in pairs:
+        if s2 is None:
+            print(f"- {s1.name} has no pair (odd number of students).")
+        else:
+            print(f"- {s1.name}  🤝  {s2.name}  | Compatibility Score: {score}")
+    print()
+
+def main():
+    students: List[Student] = []
+
+    while True:
+        print("========== Hostel Roommate Matcher ==========")
+        print("1. Add Student")
+        print("2. View All Students")
+        print("3. Suggest Roommate Pairs")
+        print("4. Exit")
+
+        choice = input("Enter your choice: ").strip()
+
+        if choice == "1":
+            student = add_student()
+            students.append(student)
+        elif choice == "2":
+            print_students(students)
+        elif choice == "3":
+            run_matcher(students)
+        elif choice == "4":
+            print("Exiting... Goodbye!")
+            break
+        else:
+            print("Invalid choice. Try again.\n")
+
+if __name__ == "__main__":
+    main()
